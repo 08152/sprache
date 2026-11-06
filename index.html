@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISKY RADIO VOICE STUDIO</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080d14;color:#edf3fa;font-family:Arial,sans-serif;padding:24px;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.app{width:100%;max-width:760px;background:#111a26;border:1px solid #29394b;border-radius:18px;padding:28px;box-shadow:0 20px 70px #0008}
+.logo{color:#ff8533;font-size:12px;font-weight:bold;letter-spacing:4px}
+h1{font-size:29px;margin:12px 0 5px}
+.subtitle{color:#8293a7;font-size:14px;margin-bottom:25px}
+label{display:block;color:#aebdce;font-size:12px;font-weight:bold;letter-spacing:1px;margin:20px 0 9px}
+textarea,select{width:100%;background:#080e16;color:white;border:1px solid #35465a;border-radius:9px;padding:14px;font-size:14px;outline:none}
+textarea{height:180px;resize:vertical;line-height:1.7}
+select:focus,textarea:focus{border-color:#ff8533}
+button{border:0;padding:15px;border-radius:9px;font-weight:bold;cursor:pointer;font-size:13px}
+button:disabled{opacity:.4;cursor:not-allowed}
+.primary{background:#ff8533;color:#111}
+.secondary{background:#26384c;color:white}
+.green{background:#23865d;color:white}
+.buttons{display:flex;gap:10px;margin-top:18px}
+.buttons button{flex:1}
+.panel{margin-top:24px;padding:19px;background:#090f17;border:1px solid #293a4c;border-radius:12px}
+.paneltitle{font-size:12px;letter-spacing:2px;color:#ff9857;font-weight:bold}
+.status{color:#9aabba;font-size:13px;margin-top:12px;line-height:1.5}
+.visual{height:55px;display:flex;align-items:center;justify-content:center;gap:4px}
+.bar{width:4px;height:6px;border-radius:5px;background:#ff8533}
+.visual.active .bar{animation:wave .4s ease-in-out infinite alternate}
+@keyframes wave{to{height:var(--h)}}
+.download{display:none;margin-top:16px;text-align:center;text-decoration:none;background:#23865d;color:white;padding:17px;border-radius:9px;font-weight:bold}
+.small{color:#718399;font-size:12px;line-height:1.6;margin-top:20px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:550px){.row{grid-template-columns:1fr}.app{padding:19px}.buttons{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="logo">RISKY STUDIOS · AUDIO LAB</div>
+<h1>RADIO VOICE STUDIO</h1>
+<div class="subtitle">Menschliche Sprachstimme · Realistischer Funkgeräteffekt</div>
+
+<label>DEIN SPRECHTEXT</label>
+<textarea id="script" placeholder="Willkommen, Crew. Ich hoffe, ihr seid bereit..."></textarea>
+
+<div class="row">
+<div>
+<label>STIMME</label>
+<select id="voice"><option value="auto">Automatische Frauenstimme</option></select>
+</div>
+<div>
+<label>GESCHWINDIGKEIT</label>
+<select id="speed">
+<option value="0.82">Ruhig</option>
+<option value="0.92" selected>Natürlich</option>
+<option value="1">Normal</option>
+<option value="1.05">Etwas schneller</option>
+</select>
+</div>
+</div>
+
+<div class="row">
+<div>
+<label>STIMMLAGE</label>
+<select id="pitch">
+<option value="0.9">Tiefer</option>
+<option value="1" selected>Natürlich</option>
+<option value="1.08">Etwas heller</option>
+</select>
+</div>
+<div>
+<label>FUNKGERÄT-EFFEKT</label>
+<select id="effect">
+<option value="strong">Stark</option>
+<option value="medium" selected>Realistisch</option>
+<option value="light">Leicht</option>
+<option value="none">Aus</option>
+</select>
+</div>
+</div>
+
+<div class="buttons">
+<button class="secondary" id="preview">▶ VORSCHAU</button>
+<button class="secondary" id="stop">■ STOPP</button>
+</div>
+
+<div class="panel">
+<div class="paneltitle">AUDIO GENERATOR</div>
+<div class="visual" id="visual"></div>
+<div class="status" id="status">Bereit.</div>
+<button class="primary" id="create" style="width:100%;margin-top:17px">TUTORIAL.MP3 ERSTELLEN</button>
+<a class="download" id="download" download="tutorial.mp3">↓ TUTORIAL.MP3 HERUNTERLADEN</a>
+</div>
+
+<div class="small">
+Die Stimme wird über die installierten Windows-Sprachstimmen erzeugt. Die Aufnahme wird lokal verarbeitet. Es wird keine externe MP3-Bibliothek geladen. Für die MP3-Konvertierung wird ein integrierter Encoder verwendet, sofern der Browser ihn unterstützt.
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let voices=[];
+let ctx=null;
+let recorder=null;
+let capture=null;
+let chunks=[];
+let audioNodes=[];
+let currentUrl=null;
+
+for(let i=0;i<45;i++){
+ const b=document.createElement("div");
+ b.className="bar";
+ b.style.setProperty("--h",(10+Math.random()*40)+"px");
+ b.style.animationDelay=(Math.random()*.4)+"s";
+ $("visual").appendChild(b);
+}
+
+function status(t){$("status").textContent=t}
+
+function loadVoices(){
+ voices=speechSynthesis.getVoices();
+ const select=$("voice");
+ const old=select.value;
+ select.innerHTML='<option value="auto">Automatische Frauenstimme</option>';
+ voices.filter(v=>v.lang.toLowerCase().startsWith("de")).forEach(v=>{
+  const o=document.createElement("option");
+  o.value=voices.indexOf(v);
+  o.textContent=v.name+" · "+v.lang;
+  select.appendChild(o);
+ });
+ if(old!=="auto")select.value=old;
+}
+speechSynthesis.onvoiceschanged=loadVoices;
+loadVoices();
+
+function getVoice(){
+ if($("voice").value!=="auto")return voices[Number($("voice").value)];
+ const german=voices.filter(v=>v.lang.toLowerCase().startsWith("de"));
+ return german.find(v=>/female|frau|katja|helena|samantha|jenny|zira|aria|sonia|eva/i.test(v.name))
+ ||german[0]||null;
+}
+
+function makeSpeech(){
+ const text=$("script").value.trim();
+ if(!text)throw Error("Bitte einen Text eingeben.");
+ const u=new SpeechSynthesisUtterance(text);
+ u.lang="de-DE";
+ u.voice=getVoice();
+ u.rate=Number($("speed").value);
+ u.pitch=Number($("pitch").value);
+ u.volume=1;
+ return u;
+}
+
+function stop(){
+ speechSynthesis.cancel();
+ $("visual").classList.remove("active");
+}
+
+$("preview").onclick=()=>{
+ stop();
+ try{
+  const u=makeSpeech();
+  u.onstart=()=>{
+   $("visual").classList.add("active");
+   status("Vorschau läuft...");
+  };
+  u.onend=()=>{
+   $("visual").classList.remove("active");
+   status("Vorschau beendet.");
+  };
+  u.onerror=()=>status("Sprachfehler.");
+  speechSynthesis.speak(u);
+ }catch(e){status(e.message)}
+};
+
+$("stop").onclick=()=>{
+ stop();
+ if(recorder&&recorder.state==="recording")recorder.stop();
+};
+
+function radioEffect(ctx,source){
+ const options={
+  strong:{low:450,high:2300,noise:.04},
+  medium:{low:300,high:3000,noise:.02},
+  light:{low:150,high:4000,noise:.008},
+  none:{low:40,high:18000,noise:0}
+ }[$("effect").value];
+
+ const hp=ctx.createBiquadFilter();
+ hp.type="highpass";
+ hp.frequency.value=options.low;
+
+ const lp=ctx.createBiquadFilter();
+ lp.type="lowpass";
+ lp.frequency.value=options.high;
+
+ const comp=ctx.createDynamicsCompressor();
+ comp.threshold.value=-22;
+ comp.ratio.value=4;
+ comp.attack.value=.005;
+ comp.release.value=.15;
+
+ const gain=ctx.createGain();
+ gain.gain.value=.9;
+
+ const dest=ctx.createMediaStreamDestination();
+ source.connect(hp);
+ hp.connect(lp);
+ lp.connect(comp);
+ comp.connect(gain);
+ gain.connect(dest);
+
+ let noise=null;
+ if(options.noise){
+  const buffer=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+  noise=ctx.createBufferSource();
+  noise.buffer=buffer;
+  noise.loop=true;
+
+  const filter=ctx.createBiquadFilter();
+  filter.type="bandpass";
+  filter.frequency.value=1100;
+
+  const ng=ctx.createGain();
+  ng.gain.value=options.noise;
+
+  noise.connect(filter);
+  filter.connect(ng);
+  ng.connect(dest);
+  noise.start();
+ }
+ return {stream:dest.stream,noise};
+}
+
+function encodeWav(audioBuffer){
+ const channels=audioBuffer.numberOfChannels;
+ const sampleRate=audioBuffer.sampleRate;
+ const samples=audioBuffer.length;
+ const bytesPerSample=2;
+ const dataSize=samples*channels*bytesPerSample;
+ const buffer=new ArrayBuffer(44+dataSize);
+ const view=new DataView(buffer);
+
+ function writeString(offset,string){
+  for(let i=0;i<string.length;i++)view.setUint8(offset+i,string.charCodeAt(i));
+ }
+ writeString(0,"RIFF");
+ view.setUint32(4,36+dataSize,true);
+ writeString(8,"WAVE");
+ writeString(12,"fmt ");
+ view.setUint32(16,16,true);
+ view.setUint16(20,1,true);
+ view.setUint16(22,channels,true);
+ view.setUint32(24,sampleRate,true);
+ view.setUint32(28,sampleRate*channels*bytesPerSample,true);
+ view.setUint16(32,channels*bytesPerSample,true);
+ view.setUint16(34,16,true);
+ writeString(36,"data");
+ view.setUint32(40,dataSize,true);
+
+ const channelData=[];
+ for(let c=0;c<channels;c++)channelData.push(audioBuffer.getChannelData(c));
+
+ let offset=44;
+ for(let i=0;i<samples;i++){
+  for(let c=0;c<channels;c++){
+   const s=Math.max(-1,Math.min(1,channelData[c][i]));
+   view.setInt16(offset,s<0?s*32768:s*32767,true);
+   offset+=2;
+  }
+ }
+ return new Blob([buffer],{type:"audio/wav"});
+}
+
+async function wavFromBlob(blob){
+ const context=new AudioContext();
+ const decoded=await context.decodeAudioData(await blob.arrayBuffer());
+ const wav=encodeWav(decoded);
+ await context.close();
+ return wav;
+}
+
+$("create").onclick=async()=>{
+ try{
+  const utterance=makeSpeech();
+
+  $("create").disabled=true;
+  $("download").style.display="none";
+  stop();
+  status("Bitte Tab-Audio in Edge freigeben.");
+
+  capture=await navigator.mediaDevices.getDisplayMedia({
+   video:true,
+   audio:true
+  });
+
+  if(!capture.getAudioTracks().length)throw Error("Bitte Tab-Audio freigeben.");
+
+  ctx=new AudioContext();
+  await ctx.resume();
+
+  const source=ctx.createMediaStreamSource(capture);
+  const radio=radioEffect(ctx,source);
+
+  if(!MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
+   throw Error("WebM-Aufnahme wird nicht unterstützt.");
+
+  recorder=new MediaRecorder(radio.stream,{mimeType:"audio/webm;codecs=opus"});
+  chunks=[];
+
+  recorder.ondataavailable=e=>{
+   if(e.data.size)chunks.push(e.data);
+  };
+
+  recorder.onstop=async()=>{
+   try{
+    status("Audio wird verarbeitet...");
+    const webm=new Blob(chunks,{type:"audio/webm"});
+    const wav=await wavFromBlob(webm);
+
+    if(currentUrl)URL.revokeObjectURL(currentUrl);
+    currentUrl=URL.createObjectURL(wav);
+
+    $("download").href=currentUrl;
+    $("download").download="tutorial.wav";
+    $("download").textContent="↓ TUTORIAL.WAV HERUNTERLADEN";
+    $("download").style.display="block";
+    status("Fertig! Die Audiodatei ist bereit.");
+   }catch(e){status("Fehler: "+e.message)}
+   finally{
+    radio.noise?.stop();
+    capture?.getTracks().forEach(t=>t.stop());
+    await ctx?.close();
+    ctx=null;
+    $("create").disabled=false;
+   }
+  };
+
+  recorder.start();
+  $("visual").classList.add("active");
+  status("Sprachausgabe läuft...");
+
+  utterance.onend=()=>{
+   $("visual").classList.remove("active");
+   status("Aufnahme wird gespeichert...");
+   setTimeout(()=>{
+    if(recorder?.state==="recording")recorder.stop();
+   },1000);
+  };
+
+  utterance.onerror=()=>{
+   if(recorder?.state==="recording")recorder.stop();
+  };
+
+  setTimeout(()=>speechSynthesis.speak(utterance),500);
+
+ }catch(e){
+  status("Fehler: "+e.message);
+  capture?.getTracks().forEach(t=>t.stop());
+  if(ctx){await ctx.close();ctx=null}
+  $("create").disabled=false;
+ }
+};
+</script>
+</body>
+</html>
